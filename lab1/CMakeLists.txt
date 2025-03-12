@@ -14,7 +14,7 @@ add_executable(task1
         task1/functions.c
         task1/functions.h)
 
-add_executable(task2 "task2/main.c")
+
 
 add_executable(task6 "task6/server.c"
         "task6/client.c"

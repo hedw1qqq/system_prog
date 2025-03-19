@@ -10,7 +10,7 @@ statusCode process_path(const char *filepath, DirectoryContent *result) {
         return PATH_ERROR;
     }
 
-    // проверка на существование
+    // Check if path exists
     if (stat(abs_filepath, &path_stat) != 0) {
         result->status = PATH_ERROR;
         return PATH_ERROR;
@@ -30,7 +30,7 @@ statusCode process_path(const char *filepath, DirectoryContent *result) {
 
         dir = opendir(abs_filepath);
         if (dir == NULL) {
-            perror("Ошибка открытия директории");
+            perror("Error opening directory");
             result->status = OPENDIR_ERROR;
             return OPENDIR_ERROR;
         }
@@ -44,9 +44,7 @@ statusCode process_path(const char *filepath, DirectoryContent *result) {
         }
 
         closedir(dir);
-    }
-
-    else {
+    } else {
         result->is_directory = 0;
         strcpy(result->path, abs_filepath);
     }
@@ -64,7 +62,7 @@ int main() {
 
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0) {
-        perror("Ошибка создания сокета");
+        perror("Socket creation error");
         return SOCKET_CREATE_ERROR;
     }
 
@@ -75,38 +73,51 @@ int main() {
 
 
     if (bind(server_socket, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
-        perror("Ошибка привязки сокета");
+        perror("Socket binding error");
         close(server_socket);
         return BIND_ERROR;
     }
 
     if (listen(server_socket, 5) < 0) {
-        perror("Ошибка прослушивания");
+        perror("Listening error");
         close(server_socket);
         return LISTEN_ERROR;
     }
 
-    printf("Сервер запущен и ожидает подключений...\n");
+    printf("Server started and waiting for connections...\n");
 
     while (1) {
         client_socket = accept(server_socket, (struct sockaddr *) &client_addr, &client_addr_len);
         if (client_socket < 0) {
-            perror("Ошибка принятия подключения");
+            perror("Connection acceptance error");
             continue;
         }
 
         memset(buffer, 0, sizeof(buffer));
         int bytes_received = recv(client_socket, buffer, sizeof(buffer), 0);
         if (bytes_received <= 0) {
-            perror("Ошибка получения данных");
+            perror("Error receiving data");
             close(client_socket);
             continue;
         }
 
         statusCode status = process_path(buffer, &result);
+        if (status == SUCCESS) {
+            switch (status) {
+                case PATH_ERROR:
+                    fprintf(stderr, "Path error\n");
+                    break;
+                case OPENDIR_ERROR:
+                    fprintf(stderr, "Open directory error\n");
+                    break;
+                default:
+                    fprintf(stderr, "Unknown Error\n");
+                    break;
+            }
+        }
 
         if (send(client_socket, &result, sizeof(result), 0) < 0) {
-            perror("Ошибка отправки данных");
+            perror("Error sending data");
         }
 
         close(client_socket);

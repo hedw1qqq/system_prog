@@ -7,7 +7,7 @@ int main() {
     char path[PATH_MAX];
 
     while (1) {
-        printf("Введите абсолютный путь (или 'exit' для выхода): ");
+        printf("Enter absolute path (or 'exit' to quit): ");
         fgets(path, sizeof(path), stdin);
 
         path[strcspn(path, "\n")] = 0;
@@ -18,7 +18,7 @@ int main() {
 
         client_socket = socket(AF_INET, SOCK_STREAM, 0);
         if (client_socket < 0) {
-            perror("Ошибка создания сокета");
+            perror("Socket creation error");
             continue;
         }
 
@@ -27,19 +27,19 @@ int main() {
         server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
         if (connect(client_socket, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
-            perror("Ошибка подключения к серверу");
+            perror("Connection error to server");
             close(client_socket);
             continue;
         }
 
         if (send(client_socket, path, strlen(path), 0) < 0) {
-            perror("Ошибка отправки данных");
+            perror("Error sending data");
             close(client_socket);
             continue;
         }
 
         if (recv(client_socket, &result, sizeof(result), 0) < 0) {
-            perror("Ошибка получения данных");
+            perror("Error receiving data");
             close(client_socket);
             continue;
         }
@@ -47,23 +47,23 @@ int main() {
         switch (result.status) {
             case SUCCESS:
                 if (result.is_directory) {
-                    printf("Каталог: %s\n", result.path);
-                    printf("Файлы:\n");
+                    printf("Directory: %s\n", result.path);
+                    printf("Files:\n");
                     for (int i = 0; i < result.file_count; i++) {
                         printf("- %s\n", result.files[i]);
                     }
                 } else {
-                    printf("Абсолютный путь: %s\n", result.path);
+                    printf("Absolute path: %s\n", result.path);
                 }
                 break;
             case OPENDIR_ERROR:
-                printf("Ошибка открытия директории: %s\n", path);
+                printf("Error opening directory: %s\n", path);
                 break;
             case PATH_ERROR:
-                printf("Ошибка: указанный путь не существует: %s\n", path);
+                printf("Error: specified path does not exist: %s\n", path);
                 break;
             default:
-                printf("Неизвестная ошибка при обработке пути\n");
+                printf("Unknown error while processing path\n");
         }
 
         close(client_socket);

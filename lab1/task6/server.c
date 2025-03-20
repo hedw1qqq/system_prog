@@ -10,7 +10,7 @@ statusCode process_path(const char *filepath, DirectoryContent *result) {
         return PATH_ERROR;
     }
 
-    // Check if path exists
+
     if (stat(abs_filepath, &path_stat) != 0) {
         result->status = PATH_ERROR;
         return PATH_ERROR;
@@ -37,7 +37,7 @@ statusCode process_path(const char *filepath, DirectoryContent *result) {
 
 
         while ((entry = readdir(dir)) != NULL && result->file_count < 100) {
-            if (entry->d_type == DT_REG) {
+            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
                 strcpy(result->files[result->file_count], entry->d_name);
                 result->file_count++;
             }
@@ -102,7 +102,7 @@ int main() {
         }
 
         statusCode status = process_path(buffer, &result);
-        if (status == SUCCESS) {
+        if (status != SUCCESS) {
             switch (status) {
                 case PATH_ERROR:
                     fprintf(stderr, "Path error\n");

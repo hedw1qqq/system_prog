@@ -21,3 +21,10 @@ add_executable(task6 "task6/server.c"
         "task6/common.h"
 )
 add_executable(task5 task5/main.c)
+
+add_executable(task2 task2/main.c)
+
+add_executable(task4 "task4/server.c"
+        "task4/client.c"
+        "task4/common.h"
+)

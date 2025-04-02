@@ -1,200 +1,322 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <signal.h>
+#include <limits.h>
 #include "common.h"
 
-StatusCode checkGameState(GameState *game) {
-    if (game->wolfPosition == SHORE_FINISH &&
-        game->goatPosition == SHORE_FINISH &&
-        game->cabbagePosition == SHORE_FINISH) {
-        game->gameOver = 1;
-        return STATUS_VICTORY;
-    }
+#define MAX_CLIENTS 10
 
-    if ((game->wolfPosition == game->goatPosition &&
-         game->farmerPosition != game->wolfPosition &&
-         game->wolfPosition != IN_BOAT && game->goatPosition != IN_BOAT) ||
-        (game->goatPosition == game->cabbagePosition &&
-         game->farmerPosition != game->goatPosition &&
-         game->goatPosition != IN_BOAT && game->cabbagePosition != IN_BOAT)) {
-        game->gameOver = 1;
-        return STATUS_GAME_OVER;
-    }
+#define WOLF 0
+#define GOAT 1
+#define CABBAGE 2
+#define NOTHING -1
 
-    return STATUS_SUCCESS;
+#define LEFT_BANK 0
+#define RIGHT_BANK 1
+
+typedef struct {
+    long user_id;
+    int items[3];
+    int farmer_pos;
+    int boat_load;
+    int active;
+    int game_over;
+} GameState;
+
+GameState client_states[MAX_CLIENTS];
+int msqid = -1;
+
+void initialize_states() {
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        client_states[i].active = 0;
+        client_states[i].user_id = -1;
+        client_states[i].game_over = 0;
+    }
 }
 
-StatusCode handleTakeCommand(GameState *game, const char *object) {
-    if (strcmp(game->itemInBoat, "") != 0) {
-        return STATUS_BOAT_FULL;
+GameState* find_or_create_state(long user_id) {
+    GameState* free_slot = NULL;
+    if (user_id <= 0) return NULL;
+
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        if (client_states[i].active && client_states[i].user_id == user_id) {
+            return &client_states[i];
+        }
+        if (!client_states[i].active && free_slot == NULL) {
+            free_slot = &client_states[i];
+        }
     }
 
-    if (strcmp(object, "wolf") == 0) {
-        if (game->wolfPosition == game->farmerPosition && game->wolfPosition != IN_BOAT) {
-            game->wolfPosition = IN_BOAT;
-            strcpy(game->itemInBoat, "wolf");
-            return STATUS_SUCCESS;
-        }
-    } else if (strcmp(object, "goat") == 0) {
-        if (game->goatPosition == game->farmerPosition && game->goatPosition != IN_BOAT) {
-            game->goatPosition = IN_BOAT;
-            strcpy(game->itemInBoat, "goat");
-            return STATUS_SUCCESS;
-        }
-    } else if (strcmp(object, "cabbage") == 0) {
-        if (game->cabbagePosition == game->farmerPosition && game->cabbagePosition != IN_BOAT) {
-            game->cabbagePosition = IN_BOAT;
-            strcpy(game->itemInBoat, "cabbage");
-            return STATUS_SUCCESS;
-        }
+    if (free_slot != NULL) {
+        free_slot->active = 1;
+        free_slot->user_id = user_id;
+        free_slot->items[WOLF] = LEFT_BANK;
+        free_slot->items[GOAT] = LEFT_BANK;
+        free_slot->items[CABBAGE] = LEFT_BANK;
+        free_slot->farmer_pos = LEFT_BANK;
+        free_slot->boat_load = NOTHING;
+        free_slot->game_over = 0;
+        return free_slot;
+    }
+
+    return NULL;
+}
+
+void deactivate_state(GameState* state) {
+     if(state) {
+        state->active = 0;
+        state->user_id = -1;
+        state->game_over = 0;
+     }
+}
+
+int check_loss_condition(const GameState* state) {
+    int unattended_bank = 1 - state->farmer_pos;
+
+    if (state->items[WOLF] == unattended_bank && state->items[GOAT] == unattended_bank && state->boat_load != WOLF && state->boat_load != GOAT) {
+         return 1;
+    }
+     if (state->items[GOAT] == unattended_bank && state->items[CABBAGE] == unattended_bank && state->boat_load != GOAT && state->boat_load != CABBAGE) {
+         return 1;
+    }
+
+    return 0;
+}
+
+int check_win_condition(const GameState* state) {
+    return state->items[WOLF] == RIGHT_BANK &&
+           state->items[GOAT] == RIGHT_BANK &&
+           state->items[CABBAGE] == RIGHT_BANK &&
+           state->farmer_pos == RIGHT_BANK;
+}
+
+StatusCode process_take(GameState* state, const char* arg) {
+    if (!arg || strlen(arg) == 0) return ERROR_ARGS;
+    if (state->boat_load != NOTHING) return ERROR_BOAT_FULL;
+
+    int item_to_take = NOTHING;
+    if (strcmp(arg, "wolf") == 0) item_to_take = WOLF;
+    else if (strcmp(arg, "goat") == 0) item_to_take = GOAT;
+    else if (strcmp(arg, "cabbage") == 0) item_to_take = CABBAGE;
+    else return ERROR_UNKNOWN_OBJECT;
+
+    if (state->items[item_to_take] != state->farmer_pos) return ERROR_WRONG_BANK;
+
+    state->boat_load = item_to_take;
+    state->items[item_to_take] = -1;
+    return OK_TOOK;
+}
+
+StatusCode process_put(GameState* state) {
+    if (state->boat_load == NOTHING) return ERROR_NOTHING_TO_PUT;
+
+    state->items[state->boat_load] = state->farmer_pos;
+    state->boat_load = NOTHING;
+
+    if (check_loss_condition(state)) {
+        state->game_over = 1;
+        return FAIL_EATEN;
+    }
+    if (check_win_condition(state)) {
+         state->game_over = 1;
+        return WIN;
+    }
+
+    return OK_PUT;
+}
+
+StatusCode process_move(GameState* state) {
+    state->farmer_pos = 1 - state->farmer_pos;
+
+    if (check_loss_condition(state)) {
+        state->game_over = 1;
+        return FAIL_EATEN;
+    }
+     if (check_win_condition(state)) {
+         state->game_over = 1;
+        return WIN;
+    }
+
+    return OK_MOVED;
+}
+
+StatusCode process_command(GameState* state, const char* command) {
+    if (state->game_over) return ERROR_GAME_OVER;
+
+    char cmd[20];
+    char arg[20];
+    char extra[2] = "";
+    int parsed = sscanf(command, "%19s %19s %1s", cmd, arg, extra);
+
+    if (strcmp(cmd, "take") == 0) {
+        if (parsed != 2) return ERROR_ARGS;
+        return process_take(state, arg);
+    } else if (strcmp(cmd, "put") == 0) {
+        if (parsed != 1) return ERROR_ARGS;
+        return process_put(state);
+    } else if (strcmp(cmd, "move") == 0) {
+         if (parsed != 1) return ERROR_ARGS;
+        return process_move(state);
     } else {
-        return STATUS_INVALID_OBJECT;
+        return ERROR_UNKNOWN_COMMAND;
     }
-
-    return STATUS_INVALID_OBJECT;
 }
 
-StatusCode handlePutCommand(GameState *game) {
-    if (strcmp(game->itemInBoat, "") == 0) {
-        return STATUS_BOAT_EMPTY;
-    }
+void send_response(long user_id, StatusCode code, const char* message) {
+    struct msgbuf response_msg;
+    response_msg.mtype = user_id;
 
-    if (strcmp(game->itemInBoat, "wolf") == 0) {
-        game->wolfPosition = game->farmerPosition;
-        strcpy(game->itemInBoat, "");
-    } else if (strcmp(game->itemInBoat, "goat") == 0) {
-        game->goatPosition = game->farmerPosition;
-        strcpy(game->itemInBoat, "");
-    } else if (strcmp(game->itemInBoat, "cabbage") == 0) {
-        game->cabbagePosition = game->farmerPosition;
-        strcpy(game->itemInBoat, "");
-    }
+    snprintf(response_msg.mtext, MAX_MSG_SIZE, "%d %s", code, message ? message : "");
+    response_msg.mtext[MAX_MSG_SIZE - 1] = '\0';
 
-    return STATUS_SUCCESS;
+
+
+    if (msgsnd(msqid, &response_msg, strlen(response_msg.mtext) + 1, 0) == -1) {
+
+        GameState* state = find_or_create_state(user_id);
+         if(state && state->active) {
+             deactivate_state(state);
+         }
+    }
 }
 
-StatusCode handleMoveCommand(GameState *game) {
-    game->farmerPosition = (game->farmerPosition == SHORE_START) ? SHORE_FINISH : SHORE_START;
+const char* get_status_message(StatusCode code, const GameState* state) {
+     switch(code) {
+        case OK_CONTINUE:
+            return "Command accepted.";
+        case OK_MOVED:
+            return state ? (state->farmer_pos == LEFT_BANK ? "Moved to left bank." : "Moved to right bank.") : "Moved.";
+        case OK_TOOK:
+            if (!state || state->boat_load == NOTHING) return "Took item.";
+            return (state->boat_load == WOLF) ? "Took wolf." : (state->boat_load == GOAT) ? "Took goat." : "Took cabbage.";
+        case OK_PUT:
+             return state ? (state->farmer_pos == LEFT_BANK ? "Put item on left bank." : "Put item on right bank.") : "Put item.";
+        case WIN: return "WIN: All items successfully transported!";
+        case FAIL_EATEN:
+            return "FAIL: An item was eaten!";
+        case ERROR_ARGS:
+            return "Error: Invalid arguments or format for command.";
+        case ERROR_BOAT_FULL:
+            return "Error: Boat is already full.";
+        case ERROR_NOTHING_TO_PUT:
+            return "Error: Boat is empty, nothing to put.";
+        case ERROR_WRONG_BANK:
+            return "Error: Object is not on this bank.";
+        case ERROR_UNKNOWN_OBJECT
+         : return "Error: Unknown object specified.";
+        case ERROR_UNKNOWN_COMMAND:
+            return "Error: Unknown command.";
+        case ERROR_SERVER_BUSY:
+            return "Error: Server is busy, max clients reached.";
+        case ERROR_INVALID_USER_ID:
+            return "Error: Invalid User ID received.";
+        case ERROR_GAME_OVER:
+            return "Error: Game already finished (Win/Fail). Cannot accept more commands.";
+        case ERROR_INTERNAL:
+            return "Error: Internal server error.";
+        default:
+            return "Unknown status code.";
+     }
+}
 
-    if (strcmp(game->itemInBoat, "wolf") == 0) {
-        game->wolfPosition = IN_BOAT;
-    } else if (strcmp(game->itemInBoat, "goat") == 0) {
-        game->goatPosition = IN_BOAT;
-    } else if (strcmp(game->itemInBoat, "cabbage") == 0) {
-        game->cabbagePosition = IN_BOAT;
+void cleanup(int signum) {
+
+    if (msqid != -1) {
+        if (msgctl(msqid, IPC_RMID, NULL) == -1) {
+        } else {
+
+        }
     }
-
-    game->moveCount++;
-    return STATUS_SUCCESS;
+    _exit(SUCCESS);
 }
 
 int main() {
-    key_t key;
-    int msgid;
-    Message message;
-    GameState games[MAX_USERS] = {0};
-    int running = 1;
-    int i;
-    StatusCode status;
+    struct msgbuf msg;
+    struct sigaction sa;
 
-    key = ftok(".", 'a');
+    sa.sa_handler = cleanup;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    if (sigaction(SIGINT, &sa, NULL) == -1 || sigaction(SIGTERM, &sa, NULL) == -1) {
+        fprintf(stderr, "Server Error: Failed to set signal handlers.\n");
+        return FAILURE;
+    }
+
+    initialize_states();
+
+    key_t key = ftok(SERVER_KEY_PATH, SERVER_KEY_ID);
     if (key == -1) {
-        perror("ftok error");
-        return STATUS_QUEUE_ERROR;
+
+        fprintf(stderr, "Server Error: ftok failed. Ensure '%s' exists.\n", SERVER_KEY_PATH);
+        return FAILURE;
     }
 
-    msgid = msgget(key, 0666 | IPC_CREAT);
-    if (msgid == -1) {
-        perror("msgget error");
-        return STATUS_QUEUE_ERROR;
+    msqid = msgget(key, 0666 | IPC_CREAT);
+    if (msqid == -1) {
+
+        fprintf(stderr, "Server Error: msgget failed. Check permissions or existing queue.\n");
+        return FAILURE;
     }
 
-    printf("Server started. Waiting for messages...\n");
 
-    while (running) {
-        if (msgrcv(msgid, &message, sizeof(message) - sizeof(long), 1, 0) == -1) {
-            if (errno == EINTR) {
-                continue;
-            }
-            perror("msgrcv error");
-            break;
+    while (1) {
+        if (msgrcv(msqid, &msg, sizeof(msg.mtext), SERVER_MSG_TYPE, 0) == -1) {
+
+             break;
         }
 
-        i = 0;
-        while (i < MAX_USERS && games[i].userId != 0 && games[i].userId != message.userId) {
-            i++;
+        long user_id;
+        char client_command[MAX_MSG_SIZE];
+        char* endptr;
+        char* first_space = strchr(msg.mtext, ' ');
+
+        if (!first_space) {
+             fprintf(stderr, "Server Warning: Received malformed message (no space after ID): %s\n", msg.mtext);
+             continue;
         }
 
-        if (i == MAX_USERS) {
-            message.status = STATUS_SERVER_ERROR;
-            message.messageType = message.userId;
-            msgsnd(msgid, &message, sizeof(message) - sizeof(long), 0);
+        *first_space = '\0';
+        user_id = strtol(msg.mtext, &endptr, 10);
+
+        if (*endptr != '\0' || user_id <= 0 || user_id > LONG_MAX ) {
+            *first_space = ' ';
+            fprintf(stderr, "Server Warning: Received invalid User ID format or value: %s\n", msg.mtext);
             continue;
         }
 
-        switch (message.command) {
-            case CMD_NEW_GAME:
-                games[i].userId = message.userId;
-                games[i].farmerPosition = SHORE_START;
-                games[i].wolfPosition = SHORE_START;
-                games[i].goatPosition = SHORE_START;
-                games[i].cabbagePosition = SHORE_START;
-                strcpy(games[i].itemInBoat, "");
-                games[i].moveCount = 0;
-                games[i].gameOver = 0;
+        *first_space = ' ';
+        strncpy(client_command, first_space + 1, sizeof(client_command) - 1);
+        client_command[sizeof(client_command)-1] = '\0';
 
-                message.status = STATUS_SUCCESS;
-                break;
 
-            case CMD_TAKE:
-                if (games[i].userId == 0) {
-                    message.status = STATUS_AUTH_ERROR;
-                } else {
-                    message.status = handleTakeCommand(&games[i], message.object);
-                }
-                break;
 
-            case CMD_PUT:
-                if (games[i].userId == 0) {
-                    message.status = STATUS_AUTH_ERROR;
-                } else {
-                    message.status = handlePutCommand(&games[i]);
-                }
-                break;
+        GameState* current_state = find_or_create_state(user_id);
 
-            case CMD_MOVE:
-                if (games[i].userId == 0) {
-                    message.status = STATUS_AUTH_ERROR;
-                } else {
-                    message.status = handleMoveCommand(&games[i]);
-                }
-                break;
+        StatusCode response_code;
+        const char* response_msg_text;
 
-            case CMD_QUIT:
-                games[i].userId = 0;
-                message.status = STATUS_SUCCESS;
-                break;
+        if (current_state == NULL) {
 
-            default:
-                message.status = STATUS_INVALID_COMMAND;
-                break;
-        }
+            response_code = ERROR_SERVER_BUSY;
+            response_msg_text = get_status_message(response_code, NULL);
+            send_response(user_id, response_code, response_msg_text);
+        } else {
+            response_code = process_command(current_state, client_command);
+            response_msg_text = get_status_message(response_code, current_state);
+            send_response(user_id, response_code, response_msg_text);
 
-        if (message.status == STATUS_SUCCESS && message.command != CMD_QUIT) {
-            status = checkGameState(&games[i]);
-            if (status != STATUS_SUCCESS) {
-                message.status = status;
+            if (current_state->game_over) {
+                 deactivate_state(current_state);
             }
         }
-
-        message.messageType = message.userId;
-        memcpy(&message.gameState, &games[i], sizeof(GameState));
-
-        if (msgsnd(msgid, &message, sizeof(message) - sizeof(long), 0) == -1) {
-            perror("msgsnd error");
-        }
     }
 
-    if (msgctl(msgid, IPC_RMID, NULL) == -1) {
-        perror("msgctl error");
-    }
 
-    return STATUS_SUCCESS;
+     cleanup(0);
+
+    return SUCCESS;
 }

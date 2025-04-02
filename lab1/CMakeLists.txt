@@ -3,7 +3,7 @@ project(lab1 C)
 
 set(CMAKE_C_STANDARD 11)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror -pedantic")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror -pedantic -fsanitize=address -fsanitize=leak")
 add_executable(task7
         "task7/main.c")
 add_executable(task3

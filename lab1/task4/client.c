@@ -1,176 +1,135 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <limits.h>
 #include "common.h"
 
-void printGameState(const GameState *state) {
-    printf("Current state:\n");
-    printf("  Farmer: %s\n", state->farmerPosition == SHORE_START ? "Starting shore" : "Finishing shore");
-    printf("  Wolf: %s\n",
-           state->wolfPosition == SHORE_START ? "Starting shore" :
-           (state->wolfPosition == SHORE_FINISH ? "Finishing shore" : "In boat"));
-    printf("  Goat: %s\n",
-           state->goatPosition == SHORE_START ? "Starting shore" :
-           (state->goatPosition == SHORE_FINISH ? "Finishing shore" : "In boat"));
-    printf("  Cabbage: %s\n",
-           state->cabbagePosition == SHORE_START ? "Starting shore" :
-           (state->cabbagePosition == SHORE_FINISH ? "Finishing shore" : "In boat"));
-    printf("  Item in boat: %s\n", state->itemInBoat);
-    printf("  Moves: %d\n", state->moveCount);
-    printf("\n");
-}
-
-void trimString(char *str) {
-    size_t len = strlen(str);
-
-    while (len > 0 && (str[len - 1] == ' ' || str[len - 1] == '\n' || str[len - 1] == '\r')) {
-        str[--len] = '\0';
-    }
+const char* get_client_status_message(StatusCode code, const char* details) {
+     switch(code) {
+        case OK_CONTINUE:
+        case OK_MOVED:
+        case OK_TOOK:
+        case OK_PUT:
+             return details && strlen(details) > 0 ? details : "OK";
+        case WIN: return details && strlen(details) > 0 ? details : "WIN!";
+        case FAIL_EATEN: return details && strlen(details) > 0 ? details : "FAIL!";
+        case ERROR_ARGS:
+        case ERROR_BOAT_FULL:
+        case ERROR_NOTHING_TO_PUT:
+        case ERROR_WRONG_BANK:
+        case ERROR_UNKNOWN_OBJECT:
+        case ERROR_UNKNOWN_COMMAND:
+        case ERROR_SERVER_BUSY:
+        case ERROR_INVALID_USER_ID:
+        case ERROR_GAME_OVER:
+        case ERROR_INTERNAL:
+             return details && strlen(details) > 0 ? details : "Error received from server.";
+        default:
+             return "Received unknown status code from server.";
+     }
 }
 
 int main(int argc, char *argv[]) {
-    key_t key;
-    int msgid;
-    Message message;
-    FILE *fp;
-    char line[256];
-    int userId;
-
-
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <commands_file>\n", argv[0]);
-        return STATUS_INVALID_COMMAND;
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <user_id> <command_file>\n", argv[0]);
+        return FAILURE;
     }
 
-    srand(time(NULL) + getpid());
-    userId = rand() % 10000 + 1;
-    printf("Client started with user ID: %d\n", userId);
+    char *endptr;
+    long user_id = strtol(argv[1], &endptr, 10);
 
-    key = ftok(".", 'a');
-    if (key == -1) {
-        perror("ftok error");
-        return STATUS_QUEUE_ERROR;
+    if (*endptr != '\0' || user_id <= 0 || user_id > LONG_MAX) {
+         fprintf(stderr, "Client Error: Invalid user_id '%s'. user_id must be > 0.\n", argv[1]);
+         return FAILURE;
     }
 
-    msgid = msgget(key, 0666 | IPC_CREAT);
-    if (msgid == -1) {
-        perror("msgget error");
-        return STATUS_QUEUE_ERROR;
+    const char *filename = argv[2];
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+
+        fprintf(stderr, "Client Error: Could not open command file '%s'.\n", filename);
+        return FAILURE;
     }
 
-    message.messageType = 1;
-    message.userId = userId;
-    message.command = CMD_NEW_GAME;
-    strcpy(message.object, "");
+    key_t key = ftok(SERVER_KEY_PATH, SERVER_KEY_ID);
+     if (key == -1) {
 
-    if (msgsnd(msgid, &message, sizeof(message) - sizeof(long), 0) == -1) {
-        perror("msgsnd error");
-        return STATUS_QUEUE_ERROR;
+        fprintf(stderr, "Client Error: ftok failed. Ensure '%s' exists.\n", SERVER_KEY_PATH);
+        fclose(file);
+        return FAILURE;
     }
 
-    if (msgrcv(msgid, &message, sizeof(message) - sizeof(long), userId, 0) == -1) {
-        perror("msgrcv error");
-        return STATUS_QUEUE_ERROR;
+    int msqid = msgget(key, 0666);
+    if (msqid == -1) {
+
+        fprintf(stderr, "Client Error: Failed to get message queue. Is the server running?\n");
+        fclose(file);
+        return FAILURE;
     }
 
-    if (message.status != STATUS_SUCCESS) {
-        fprintf(stderr, "Error starting new game: status code %d\n", message.status);
-        return message.status;
-    }
+    struct msgbuf send_buf;
+    struct msgbuf recv_buf;
+    char command_line[MAX_MSG_SIZE / 2];
 
-    printf("New game started successfully.\n");
-    printGameState(&message.gameState);
 
-    fp = fopen(argv[1], "r");
-    if (fp == NULL) {
-        perror("Error opening file");
-        return STATUS_SERVER_ERROR;
-    }
+    int game_finished = 0;
 
-    while (fgets(line, sizeof(line), fp)) {
-        trimString(line);
+    while (!game_finished && fgets(command_line, sizeof(command_line), file)) {
+        command_line[strcspn(command_line, "\n")] = 0;
 
-        if (strncmp(line, "take ", 5) == 0) {
-            message.command = CMD_TAKE;
-            char *object = line + 5;
-            size_t objLen = strlen(object);
-
-            if (objLen > 0 && object[objLen - 1] == ';') {
-                object[objLen - 1] = '\0';
-            }
-
-            strcpy(message.object, object);
-        } else if (strcmp(line, "put;") == 0) {
-            message.command = CMD_PUT;
-            strcpy(message.object, "");
-        } else if (strcmp(line, "move;") == 0) {
-            message.command = CMD_MOVE;
-            strcpy(message.object, "");
-        } else {
-            printf("Invalid command: %s\n", line);
+        if (strlen(command_line) == 0) {
             continue;
         }
 
-        message.messageType = 1;
-        message.userId = userId;
+        send_buf.mtype = SERVER_MSG_TYPE;
+        snprintf(send_buf.mtext, MAX_MSG_SIZE, "%ld %s", user_id, command_line);
+        send_buf.mtext[MAX_MSG_SIZE - 1] = '\0';
 
-        if (msgsnd(msgid, &message, sizeof(message) - sizeof(long), 0) == -1) {
-            perror("msgsnd error");
+
+
+        if (msgsnd(msqid, &send_buf, strlen(send_buf.mtext) + 1, 0) == -1) {
+
+            fprintf(stderr, "Client Error: Failed to send message to server.\n");
             break;
         }
 
-        if (msgrcv(msgid, &message, sizeof(message) - sizeof(long), userId, 0) == -1) {
-            perror("msgrcv error");
+
+        if (msgrcv(msqid, &recv_buf, sizeof(recv_buf.mtext), user_id, 0) == -1) {
+
+             fprintf(stderr, "Client Error: Failed to receive message from server or queue removed.\n");
             break;
         }
 
-        switch (message.status) {
-            case STATUS_SUCCESS:
-                printf("Command '%s' executed successfully.\n", line);
-                break;
-            case STATUS_INVALID_COMMAND:
-                printf("Invalid command: %s\n", line);
-                break;
-            case STATUS_INVALID_OBJECT:
-                printf("Invalid object specified in: %s\n", line);
-                break;
-            case STATUS_BOAT_FULL:
-                printf("Boat is already full: %s\n", line);
-                break;
-            case STATUS_BOAT_EMPTY:
-                printf("Nothing to put from the boat: %s\n", line);
-                break;
-            case STATUS_GAME_OVER:
-                printf("Game over: %s\n",
-                    (message.gameState.wolfPosition == message.gameState.goatPosition &&
-                     message.gameState.wolfPosition != IN_BOAT &&
-                     message.gameState.farmerPosition != message.gameState.wolfPosition) ?
-                     "Wolf ate the goat!" : "Goat ate the cabbage!");
-                message.command = CMD_QUIT;
-                msgsnd(msgid, &message, sizeof(message) - sizeof(long), 0);
-                fclose(fp);
-                return STATUS_GAME_OVER;
-            case STATUS_VICTORY:
-                printf("Victory! All items successfully transported in %d moves.\n", message.gameState.moveCount);
-                message.command = CMD_QUIT;
-                msgsnd(msgid, &message, sizeof(message) - sizeof(long), 0);
-                fclose(fp);
-                return STATUS_VICTORY;
-            default:
-                fprintf(stderr, "Error processing command: status code %d\n", message.status);
-                break;
+        int received_status_code_int;
+        char response_details[MAX_MSG_SIZE];
+        response_details[0] = '\0';
+
+        int parsed_items = sscanf(recv_buf.mtext, "%d %[^\n]", &received_status_code_int, response_details);
+
+        if (parsed_items < 1) {
+             fprintf(stderr, "Client Error: Received malformed response from server: %s\n", recv_buf.mtext);
+             break;
         }
 
-        printGameState(&message.gameState);
+        StatusCode received_status = received_status_code_int;
+        const char* display_message = get_client_status_message(received_status, response_details);
+
+        printf("Client: Server response: %s\n", display_message);
+
+        if (received_status == WIN || received_status == FAIL_EATEN || received_status == ERROR_GAME_OVER) {
+
+            game_finished = 1;
+        } else if (received_status >= ERROR_ARGS && received_status <= ERROR_INTERNAL) {
+
+             game_finished = 1;
+        }
     }
 
-    fclose(fp);
+    fclose(file);
 
-    message.messageType = 1;
-    message.userId = userId;
-    message.command = CMD_QUIT;
-    strcpy(message.object, "");
 
-    if (msgsnd(msgid, &message, sizeof(message) - sizeof(long), 0) == -1) {
-        perror("msgsnd error");
-    }
-
-    return STATUS_SUCCESS;
+    return SUCCESS;
 }

@@ -1,4 +1,5 @@
 take cabbage
 move
-put;
-move;
+put
+move
+take wolf

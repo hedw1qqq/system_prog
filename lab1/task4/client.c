@@ -39,13 +39,13 @@ int main(int argc, char *argv[]) {
     }
 
     char *endptr;
-    long user_id = strtol(argv[1], &endptr, 10);
+    long long id_temp = strtoll(argv[1], &endptr, 10);
 
-    if (*endptr != '\0' || user_id <= 0 || user_id > LONG_MAX) {
+    if (*endptr != '\0' || id_temp <= 0 || id_temp > LONG_MAX) {
          fprintf(stderr, "Client Error: Invalid user_id '%s'. user_id must be > 0.\n", argv[1]);
          return FAILURE;
     }
-
+    long user_id = (long) id_temp;
     const char *filename = argv[2];
     FILE *file = fopen(filename, "r");
     if (!file) {

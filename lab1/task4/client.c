@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
 
 
     if (*endptr != '\0' || id_temp <= 0 || id_temp > LONG_MAX) {
-         fprintf(stderr, "Client Error: Invalid user_id '%s'. Must be a positive number fitting in 'long'.\n", argv[1]);
+         fprintf(stderr, "Client Error: Invalid user_id '%s'. user_id must be > 0.\n", argv[1]);
          return FAILURE;
     }
     long user_id = (long) id_temp;
@@ -56,14 +56,14 @@ int main(int argc, char *argv[]) {
 
     key_t key = ftok(SERVER_KEY_PATH, SERVER_KEY_ID);
      if (key == -1) {
-        fprintf(stderr, "Client Error: ftok failed. Ensure '%s' exists.\n", SERVER_KEY_PATH);
+        fprintf(stderr, "Client Error: ftok failed.\n");
         fclose(file);
         return FAILURE;
     }
 
     int msqid = msgget(key, 0666);
     if (msqid == -1) {
-        fprintf(stderr, "Client Error: Failed to get message queue. Is the server running?\n");
+        fprintf(stderr, "Client Error: Failed to get message queue\n");
         fclose(file);
         return FAILURE;
     }
@@ -108,7 +108,6 @@ int main(int argc, char *argv[]) {
 
         if (received_status_code_int < OK_CONTINUE || received_status_code_int > ERROR_INTERNAL) {
              fprintf(stderr, "Client Error: Received invalid status code from server: %d\n", received_status_code_int);
-
              game_finished = 1;
              continue;
         }

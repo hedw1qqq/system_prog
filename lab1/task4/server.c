@@ -13,7 +13,7 @@
 #define WOLF 0
 #define GOAT 1
 #define CABBAGE 2
-#define NOTHING -1
+#define NOTHING (-1)
 
 #define LEFT_BANK 0
 #define RIGHT_BANK 1
@@ -45,7 +45,9 @@ void initialize_states() {
 
 GameState *find_or_create_state(long user_id) {
     GameState *free_slot = NULL;
-    if (user_id <= 0) return NULL;
+    if (user_id <= 0) {
+        return NULL;
+    }
 
     for (int i = 0; i < MAX_CLIENTS; ++i) {
         if (client_states[i].active && client_states[i].user_id == user_id) {
@@ -106,8 +108,12 @@ int check_win_condition(const GameState *state) {
 }
 
 StatusCode process_take(GameState *state, const char *arg) {
-    if (!arg || strlen(arg) == 0) return ERROR_ARGS;
-    if (state->boat_load != NOTHING) return ERROR_BOAT_FULL;
+    if (!arg || strlen(arg) == 0) {
+        return ERROR_ARGS;
+    }
+    if (state->boat_load != NOTHING) {
+        return ERROR_BOAT_FULL;
+    }
 
     int item_to_take = NOTHING;
     if (strcmp(arg, "wolf") == 0) {
@@ -121,7 +127,9 @@ StatusCode process_take(GameState *state, const char *arg) {
         return ERROR_UNKNOWN_OBJECT;
     }
 
-    if (state->items[item_to_take] != state->farmer_pos) return ERROR_WRONG_BANK;
+    if (state->items[item_to_take] != state->farmer_pos) {
+        return ERROR_WRONG_BANK;
+    }
 
     state->boat_load = item_to_take;
     state->items[item_to_take] = -1;
@@ -129,7 +137,9 @@ StatusCode process_take(GameState *state, const char *arg) {
 }
 
 StatusCode process_put(GameState *state) {
-    if (state->boat_load == NOTHING) return ERROR_NOTHING_TO_PUT;
+    if (state->boat_load == NOTHING) {
+        return ERROR_NOTHING_TO_PUT;
+    }
     state->items[state->boat_load] = state->farmer_pos;
     state->boat_load = NOTHING;
 
@@ -165,7 +175,9 @@ StatusCode process_move(GameState *state) {
 
 
 StatusCode process_command(GameState *state, const char *command) {
-    if (state->game_over) return ERROR_GAME_OVER;
+    if (state->game_over) {
+        return ERROR_GAME_OVER;
+    }
 
     char cmd[20];
     char arg[20];
@@ -278,13 +290,13 @@ int main() {
 
     key_t key = ftok(SERVER_KEY_PATH, SERVER_KEY_ID);
     if (key == -1) {
-        fprintf(stderr, "Server Error: ftok failed. Ensure '%s' exists.\n", SERVER_KEY_PATH);
+        fprintf(stderr, "Server Error: ftok failed. \n");
         return FAILURE;
     }
 
     msqid = msgget(key, 0666 | IPC_CREAT);
     if (msqid == -1) {
-        fprintf(stderr, "Server Error: msgget failed. Check permissions or existing queue.\n");
+        fprintf(stderr, "Server Error: msgget failed\n");
         return FAILURE;
     }
 

@@ -46,11 +46,6 @@ class Elevator {
 	      floors_covered_count_(0),
 	      remaining_action_ticks_(0) {}
 
-	Elevator(const Elevator &) = delete;
-	Elevator &operator=(const Elevator &) = delete;
-	Elevator(Elevator &&) = delete;
-	Elevator &operator=(Elevator &&) = delete;
-
 	void start(std::deque<Person> *requests_queue, std::mutex *queue_mtx, std::condition_variable *queue_cv,
 	           std::atomic<bool> *stop_flag, std::mutex *stats_mtx, double *total_wait_time_sec,
 	           size_t *total_boarded_groups) {
@@ -267,7 +262,9 @@ class Elevator {
 	}
 
 	void move_towards(size_t target_floor) {
-		if (target_floor == current_floor_) return;
+		if (target_floor == current_floor_) {
+			return;
+		}
 
 		status_ = Status::MOVING;
 
@@ -298,11 +295,15 @@ class Elevator {
 
 	bool should_stop_at_floor(size_t floor_to_check) {
 		for (const auto &group : passengers_inside_) {
-			if (group.destination == floor_to_check) return true;
+			if (group.destination == floor_to_check) {
+				return true;
+			}
 		}
 
 		for (const auto &group : pending_pickups_) {
-			if (group.location == floor_to_check) return true;
+			if (group.location == floor_to_check) {
+				return true;
+			}
 		}
 
 		if (capacity_ - current_load_ > 0) {
@@ -631,7 +632,7 @@ int main(int argc, char *argv[]) {
 	while (true) {
 		std::cout << "\nEnter command ('stats', 'exit'): ";
 		if (!(std::cin >> user_command)) {
-			logger->info("Input stream error or EOF detected. Initiating stop.");
+			logger->info("Input stream error or EOF detected.");
 			if (!std::cin.eof()) {
 				std::cin.clear();
 				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');

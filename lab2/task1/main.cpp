@@ -4,8 +4,8 @@
 
 int main() {
 	try {
-		Logger logger =
-		    Logger::Builder().setLogLevel(LogLevel::DEBUG).addConsoleHandler().addFileHandler("my_app.log").build();
+		auto logger =
+		    Logger::Builder().setLogLevel(LogLevel::CRITICAL).addConsoleHandler().addFileHandler("my_app.log").build();
 
 		logger.info("start");
 		logger.warning("warning");

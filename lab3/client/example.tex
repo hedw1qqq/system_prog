@@ -1,0 +1,124 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[T2A]{fontenc} %
+\usepackage[utf8]{inputenc}
+\usepackage[russian,english]{babel}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{blindtext}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{cmap} % Для корректного поиска кириллицы в PDF
+
+% Настройка полей документа
+\geometry{left=2.5cm, right=2.5cm, top=2cm, bottom=2cm, includeheadfoot}
+
+% Настройка подписей к таблицам и рисункам
+\captionsetup[table]{justification=centering, labelsep=endash}
+\captionsetup[figure]{justification=centering, labelsep=endash}
+
+\title{Пример документа LaTeX}
+\author{Иван Иванов}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Введение}
+\subsection{Цель документа}
+Пример документа LaTeX, демонстрирующий базовые элементы: формулы, таблицы, изображения и структуру. Документ предназначен для быстрого старта с системой вёрстки LaTeX.
+
+\subsection{Основные возможности}
+\begin{itemize}
+    \item Написание математических формул с использованием \texttt{amsmath}
+    \item Создание профессиональных таблиц с пакетом \texttt{booktabs}
+    \item Вставка изображений с автоматическим позиционированием
+    \item Поддержка русского и английского языков
+\end{itemize}
+
+\section{Математические формулы}
+\subsection{Уравнения}
+Формула Эйлера:
+\[
+e^{i\pi} + 1 = 0
+\]
+
+Квадратное уравнение:
+\[
+ax^2 + bx + c = 0
+\]
+
+Решение через дискриминант (исправлено):
+\[
+x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+\]
+
+\subsection{Интегралы и пределы}
+Интеграл Римана с пределами интегрирования:
+\[
+\int\limits_a^b f(x)\,dx = \lim_{n\to\infty} \sum_{k=1}^n f(x_k^*)\Delta x_k
+\]
+
+\section{Таблицы и данные}
+\subsection{Простая таблица}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{lcr}
+        \toprule
+        Левый & Центр & Правый \\
+        \midrule
+        A & B & C \\
+        1 & 2 & 3 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Пример простой таблицы с использованием booktabs}
+    \label{tab:simple}
+\end{table}
+
+\subsection{Сравнение стран}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{@{}lrr@{}}
+        \toprule
+        Страна & Население (млн) & Площадь (млн км²) \\
+        \midrule
+        Россия & 146 & 17.1 \\
+        Канада & 38  & 9.9  \\
+        Китай  & 1412& 9.6  \\
+        \bottomrule
+    \end{tabular}
+    \caption{Демографические и географические данные}
+    \label{tab:countries}
+\end{table}
+
+\section{Изображения}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{example-image-a} % Из пакета mwe
+    \caption{Пример изображения с подписью}
+    \label{fig:sample}
+\end{figure}
+
+\section{Заключение}
+\subsection{Итоги}
+Основные достижения документа:
+\begin{itemize}
+    \item Корректное отображение сложных математических формул
+    \item Профессиональное оформление таблиц
+    \item Автоматическая генерация содержания
+    \item Поддержка двуязычных документов
+\end{itemize}
+
+\subsection{Перспективы развития}
+\begin{enumerate}
+    \item Добавление перекрёстных ссылок с пакетом \texttt{hyperref}
+    \item Внедрение библиографии с \texttt{biblatex}
+    \item Создание графиков с \texttt{pgfplots}
+    \item Реализация сложных схем с \texttt{tikz}
+\end{enumerate}
+
+\end{document}

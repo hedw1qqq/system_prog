@@ -1,0 +1,6 @@
+add_subdirectory(exceptions)
+add_subdirectory(logger)
+add_subdirectory(message_queue)
+add_subdirectory(semaphore)
+add_subdirectory(shared_memory)
+add_subdirectory(tcp)

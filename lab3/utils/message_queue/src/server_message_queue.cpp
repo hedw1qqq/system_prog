@@ -31,11 +31,6 @@ GameRequest ServerMessageQueue::receive_request() {
 	GameRequest req;
 
 	if (msgrcv(msqid_, &req, sizeof(GameRequest) - sizeof(long), REQUEST_TAG, 0) < 0) {
-		if (errno == EINTR) {
-			logger_.info("ServerMessageQueue: msgrcv() interrupted by signal (EINTR).");
-
-			throw MessageQueueException("ServerMessageQueue: msgrcv() interrupted (EINTR)");
-		}
 		logger_.error("ServerMessageQueue: msgrcv() failed to receive request: " + std::string(strerror(errno)));
 		throw MessageQueueException("ServerMessageQueue: msgrcv() failed to receive request");
 	}

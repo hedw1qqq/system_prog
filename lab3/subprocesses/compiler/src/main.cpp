@@ -13,7 +13,6 @@ static std::atomic<bool> compiler_running_flag(true);
 
 void compiler_signal_handler(int signum) {
 	(void)signum;
-
 	compiler_running_flag = false;
 }
 

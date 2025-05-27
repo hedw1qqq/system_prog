@@ -9,21 +9,23 @@
 
 #include "custom_exceptions.hpp"
 #include "logger.hpp"
+
 class SharedMemory {
-   public:
-	SharedMemory(const std::string& name, size_t size, bool create, Logger& logger);
-	~SharedMemory();
+public:
+    SharedMemory(const std::string &name, size_t size, bool create, Logger &logger);
 
-	void* data() const { return ptr_; }
+    ~SharedMemory();
 
-	void close();
+    void *data() const { return ptr_; }
 
-	void unlink();
+    void close();
 
-   private:
-	std::string name_;
-	size_t size_;
-	int fd_;
-	void* ptr_;
-	Logger& logger_;
+    void unlink();
+
+private:
+    std::string name_;
+    size_t size_;
+    int fd_;
+    void *ptr_;
+    Logger &logger_;
 };

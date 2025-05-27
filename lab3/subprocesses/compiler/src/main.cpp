@@ -35,12 +35,12 @@ int main() {
 	const std::string sem_req_name = "/sem_req";
 	const std::string sem_resp_name = "/sem_resp";
 
-	app_logger.info("Compiler subserver starting. Will attempt to open IPC created by the main server.");
+	app_logger.info("Compiler subserver starting.");
 	try {
 		run_compiler(shm_name, sem_req_name, sem_resp_name, app_logger, compiler_running_flag);
 	} catch (const IPCException& e) {
 		app_logger.error("Compiler subserver failed to initialize IPC: " + std::string(e.what()));
-		app_logger.error("Ensure the main server is running and has created the IPC objects.");
+		app_logger.error("Main server is running and has created the IPC objects.");
 
 	} catch (const std::exception& e) {
 		app_logger.error("Compiler subserver exited with exception: " + std::string(e.what()));

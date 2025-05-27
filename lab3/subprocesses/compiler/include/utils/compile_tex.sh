@@ -1,40 +1,18 @@
 #!/bin/bash
 
-INPUT_TEX_FILE="$1"
-EXPECTED_OUTPUT_PDF_FILE="$2" 
+if [ ! $# -eq 2 ];then
+    exit 1
+fi
 
-TEMP_OUTPUT_DIR="/tmp"
+filename="$1"
 
-INPUT_BASENAME=$(basename "${INPUT_TEX_FILE}" .tex)
-
-DEFAULT_PDF_IN_TEMP_DIR="${TEMP_OUTPUT_DIR}/${INPUT_BASENAME}.pdf"
-
-pdflatex -interaction=nonstopmode \
-         -output-directory="${TEMP_OUTPUT_DIR}" \
-         "${INPUT_TEX_FILE}" > /dev/null 2>&1
-
-if [ -f "${DEFAULT_PDF_IN_TEMP_DIR}" ]; then
-  
-  mv "${DEFAULT_PDF_IN_TEMP_DIR}" "${EXPECTED_OUTPUT_PDF_FILE}"
-
-  if [ -f "${EXPECTED_OUTPUT_PDF_FILE}" ]; then
-    
-    rm -f "${TEMP_OUTPUT_DIR}/${INPUT_BASENAME}.aux" "${TEMP_OUTPUT_DIR}/${INPUT_BASENAME}.log"
-    exit 0 
-  else
-
-    rm -f "${DEFAULT_PDF_IN_TEMP_DIR}" 
-    rm -f "${TEMP_OUTPUT_DIR}/${INPUT_BASENAME}.aux" "${TEMP_OUTPUT_DIR}/${INPUT_BASENAME}.log"
-    exit 3 
-  fi
+if [ -f "$filename" ]; then
+    pdflatex -halt-on-error -interaction=nonstopmode -output-directory="$(dirname "$2")" -jobname="$(basename "$2")" "$filename"
+    rm -f "$(dirname "$2")/$(basename "$2").log" \
+          "$(dirname "$2")/$(basename "$2").toc" \
+          "$(dirname "$2")/$(basename "$2").aux"
+    exit 0
 else
-  
-  
-  
-  
-  
-  
-  
-  rm -f "${TEMP_OUTPUT_DIR}/${INPUT_BASENAME}.aux" "${TEMP_OUTPUT_DIR}/${INPUT_BASENAME}.log"
-  exit 1 
+  echo "This file doesn't exist" >&2
+  exit 1
 fi

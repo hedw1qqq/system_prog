@@ -101,7 +101,7 @@ void handle_client(int client_fd, Logger& log) {
 			data->file_size = static_cast<uint32_t>(file_buf.size());
 			std::memcpy(data->file_data, file_buf.data(), file_buf.size());
 
-			log.info("Enqueueing compile request for " + filename);
+			log.info("Compile request for " + filename);
 			sem_req.post();
 			log.debug("Waiting for compiler response for " + filename);
 			sem_resp.wait();
